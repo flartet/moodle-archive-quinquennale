@@ -1,10 +1,10 @@
 <?php
 
-define('URL', 'https://iris-exams-2021.univ-tlse2.fr/webservice/rest/server.php');
-define('WSTOKEN', 'c7a23ad376ea54c4ccdcbd5c625148b8');
+define('URL', 'https://iris-front-recup.i-univ-tlse2.fr/webservice/rest/server.php');
+define('WSTOKEN', '2e1dc1434f4008091db6a76e8332004e');
 
 
-$MOODLE_PATH = "/var/www/moodle-exams-git/";
+$MOODLE_PATH = "/var/www/moodle-exams/";
 $MOODLE_DATA = "/var/www/moodledata/";
 
 require_once('./moodle-rest.php');
@@ -20,7 +20,7 @@ $archiveExams->run();
 class ArchiveExams {
     public static $ARCHIVE_DIRNAME = "/var/www/moodledata/archive-quinquennale";
 
-    public static $EXCLUDED_CATEGORIES = [1, 889];
+    public static $EXCLUDED_CATEGORIES = [1, 3, 4, 12];
     public static $EXCLUDED_COURSES = [1];
     public static $EXCLUDED_MODULES = ['label', 'forum', 'resource'];
 
@@ -237,12 +237,14 @@ class ArchiveExams {
      */
     public function saveSubmission($submission, $directory) {
         foreach ($submission['lastattempt']['submission']['plugins'] as $plugin) {
-            if ($plugin['type'] == 'file') {
+            if (in_array($plugin['type'], ['file', 'onlinetext'])) {
                 foreach ($plugin['fileareas'] as $filearea) {
-                    if ($filearea['area'] == 'submission_files') {
+                    if (in_array($filearea['area'], ['submission_files', 'submissions_onlinetext'])) {
+                        $iFile = 1;
                         foreach ($filearea['files'] as $file) {
                             $extension = archive_fileutils::getExtension($file['filename']);
-                            archive_fileutils::writeFile($directory, self::$ASSIGN_SUBMISSION_FILENAME.'.'.$extension, $this->moodle_rest->getFile($file['fileurl']), true);
+                            archive_fileutils::writeFile($directory, self::$ASSIGN_SUBMISSION_FILENAME.'_'.$iFile.'.'.$extension, $this->moodle_rest->getFile($file['fileurl']), true);
+                            $iFile++;
                         }
                     }
                 }

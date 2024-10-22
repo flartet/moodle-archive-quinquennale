@@ -53,6 +53,7 @@ class moodle_rest {
         }
         curl_setopt($this->curlHandler, CURLOPT_URL, $this->url.'?'.$args);
         curl_setopt($this->curlHandler, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($this->curlHandler, CURLOPT_SSL_VERIFYPEER, false);
         $json = curl_exec($this->curlHandler);
         curl_close($this->curlHandler);
         return $json;
@@ -83,6 +84,7 @@ class moodle_rest {
         
         curl_setopt($this->curlHandler, CURLOPT_URL, $url.'?'.$args);
         curl_setopt($this->curlHandler, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($this->curlHandler, CURLOPT_SSL_VERIFYPEER, false);
         $fileContents = curl_exec($this->curlHandler);
         curl_close($this->curlHandler);
         
