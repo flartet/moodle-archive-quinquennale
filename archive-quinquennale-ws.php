@@ -1,12 +1,6 @@
 <?php
 
-define('URL', 'https://iris-front-recup.i-univ-tlse2.fr/webservice/rest/server.php');
-define('WSTOKEN', '2e1dc1434f4008091db6a76e8332004e');
-
-
-$MOODLE_PATH = "/var/www/moodle-exams/";
-$MOODLE_DATA = "/var/www/moodledata/";
-
+require_once('./archive-config.php');
 require_once('./moodle-rest.php');
 require_once('./archive_fileutils.php');
 require_once('./archive_courses.php');
@@ -18,7 +12,6 @@ $archiveExams = new ArchiveExams();
 $archiveExams->run();
 
 class ArchiveExams {
-    public static $ARCHIVE_DIRNAME = "/var/www/moodledata/archive-quinquennale";
 
     public static $EXCLUDED_CATEGORIES = [1, 3, 4, 12];
     public static $EXCLUDED_COURSES = [1];
@@ -66,6 +59,9 @@ class ArchiveExams {
 
         $this->allCategories = $this->ac->loadAllCategories();
         $courses = $this->ac->get_all_courses();
+        if (isset($courses['errorcode'])) {
+            die($courses['errorcode'].': '.$courses['message']);
+        }
         foreach ($courses as $course) {
             echo 'Parcours de '.$course['fullname'].' ('.$course['id'].") ...\n";
             $coursePath = $this->getCoursePath($course);
@@ -94,17 +90,22 @@ class ArchiveExams {
                     else if ($module['modname'] == 'assign') {
                         echo "\t\tArchivage du (".$module['modname'].') du nom ('.$module['name'].")\n";
                         $submissions = $this->ama->get_submissions($module['instance']);
-                        $submissions = (array_pop($submissions['assignments']))['submissions'];
-                        echo "\t\t".'Devoirs rendus : ('.count($submissions).")\n";
-                        if (count($submissions) > 0) {
-                            $this->saveModuleDescription($module, $modulePath);
-                            $this->saveAssignMetadata($module['instance'], $course['id'], $modulePath);
-                            $submission = $this->getRandomAssignSubmission($module['instance'], $submissions);
-                            $this->saveSubmission($submission, $modulePath);
-                            echo "\t\tDépôt de l'utilisateur (".$submission['lastattempt']['submission']['userid'].')'."\n";
+                        if (isset($submissions['errorcode'])) {
+                            echo "\t\t".$submissions['errorcode'].': '.$submissions['message']."\n";
                         }
                         else {
-                            echo "\t\tPas de submission pour ".$module['name']."\n";
+                            $submissions = (array_pop($submissions['assignments']))['submissions'];
+                            echo "\t\t".'Devoirs rendus : ('.count($submissions).")\n";
+                            if (count($submissions) > 0) {
+                                $this->saveModuleDescription($module, $modulePath);
+                                $this->saveAssignMetadata($module['instance'], $course['id'], $modulePath);
+                                $submission = $this->getRandomAssignSubmission($module['instance'], $submissions);
+                                $this->saveSubmission($submission, $modulePath);
+                                echo "\t\tDépôt de l'utilisateur (".$submission['lastattempt']['submission']['userid'].')'."\n";
+                            }
+                            else {
+                                echo "\t\tPas de submission pour ".$module['name']."\n";
+                            }
                         }
                     }
                     else if ($module['modname'] == 'folder') {
@@ -159,13 +160,15 @@ class ArchiveExams {
         $results = [];
         foreach ($users as $user) {
             $ubg = $this->amq->get_user_best_grade($module['instance'], $user['id']);
-            if (($ubg['hasgrade']) && ($ubg['grade'] > self::$GRADE_MINIMUM)) {
-                $positiveResultsCount++;
-                $results[$ubg['grade']] = $user['id'];
-            }
-            if ($positiveResultsCount > self::$LIMIT_POSITIVE_GRADES) {
-                echo "\t\t".self::$LIMIT_POSITIVE_GRADES. ' trouvés après '.$positiveResultsCount." tentatives.\n";
-                break;
+            if (isset($ubg['hasgrade'])) {
+                if (($ubg['hasgrade']) && ($ubg['grade'] > self::$GRADE_MINIMUM)) {
+                    $positiveResultsCount++;
+                    $results[$ubg['grade']] = $user['id'];
+                }
+                if ($positiveResultsCount > self::$LIMIT_POSITIVE_GRADES) {
+                    echo "\t\t".self::$LIMIT_POSITIVE_GRADES. ' trouvés après '.$positiveResultsCount." tentatives.\n";
+                    break;
+                }
             }
         }
         if (count($results) == 0) {
@@ -196,9 +199,11 @@ class ArchiveExams {
         foreach ($submissions as $submission) {
             if ($submission['gradingstatus'] != 'notgraded') {
                 $subStatus = $this->ama->get_submission_status($assignid, $submission['userid']);
-                if (intval($subStatus['feedback']['grade']['grade']) > self::$GRADE_MINIMUM) {
-                    return $subStatus;
-                }
+                if (isset($subStatus['feedback'])) {
+                    if (intval($subStatus['feedback']['grade']['grade']) > self::$GRADE_MINIMUM) {
+                        return $subStatus;
+                    }
+                }   
             }
         }
         // aïe, il n'y a pas eu de notes, oups, donc là on prend au pif sans note
@@ -291,7 +296,7 @@ class ArchiveExams {
      * @return string le chemin absolu calculé
      */
     public function getCoursePath($course) {
-        $path = self::$ARCHIVE_DIRNAME.DIRECTORY_SEPARATOR;
+        $path = ARCHIVE_DIRNAME.DIRECTORY_SEPARATOR;
         $arCategories = preg_split('/\//', $this->allCategories[$course['categoryid']]['path'], -1 , PREG_SPLIT_NO_EMPTY);
         foreach ($arCategories as $idCat) {
             $path .= $this->allCategories[$idCat]['name'].DIRECTORY_SEPARATOR;
