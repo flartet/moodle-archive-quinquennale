@@ -12,8 +12,11 @@ $archiveExams = new ArchiveExams();
 $archiveExams->run();
 
 class ArchiveExams {
+    // pour iris exams 2023
+    public static $EXCLUDED_CATEGORIES = [889,882];
+    // pour iris exams 2020
+    // public static $EXCLUDED_CATEGORIES = [1, 3, 4, 12];
 
-    public static $EXCLUDED_CATEGORIES = [1, 3, 4, 12];
     public static $EXCLUDED_COURSES = [1];
     public static $EXCLUDED_MODULES = ['label', 'forum', 'resource'];
 
@@ -83,12 +86,14 @@ class ArchiveExams {
                     $modulePath = $sectionPath.str_pad($moduleNumber, 2, '0', STR_PAD_LEFT).'_'.($module['name'] ?? self::$MODULE_DEFAULT_NAME);
                     if ($module['modname'] == 'quiz') {
                         $htmlQuizAttempt = $this->getRandomQuizAttempt($module, $users);
-                        echo "\t\tArchivage du (".$module['modname'].') du nom ('.$module['name'].")\n";
+                        echo "\t\tArchivage du (".$module['modname'].'-'.$module['instance'].') du nom ('.$module['name'].")\n";
                         $this->saveModuleDescription($module, $modulePath);
                         archive_fileutils::writeFile($modulePath, self::$QUIZ_ATTEMPT_FILENAME, $htmlQuizAttempt, true);
                     }
                     else if ($module['modname'] == 'assign') {
-                        echo "\t\tArchivage du (".$module['modname'].') du nom ('.$module['name'].")\n";
+if ($module['instance'] != 2407) continue;
+
+                        echo "\t\tArchivage du (".$module['modname'].'-'.$module['instance'].') du nom ('.$module['name'].")\n";
                         $submissions = $this->ama->get_submissions($module['instance']);
                         if (isset($submissions['errorcode'])) {
                             echo "\t\t".$submissions['errorcode'].': '.$submissions['message']."\n";
@@ -160,7 +165,10 @@ class ArchiveExams {
         $results = [];
         foreach ($users as $user) {
             $ubg = $this->amq->get_user_best_grade($module['instance'], $user['id']);
-            if (isset($ubg['hasgrade'])) {
+            if (isset($ubg['errorcode'])) {
+                echo "\t\t".$ubg['exception']."/".$ubg['errorcode']."/".$ubg['message']."\n";
+            }
+            else {
                 if (($ubg['hasgrade']) && ($ubg['grade'] > self::$GRADE_MINIMUM)) {
                     $positiveResultsCount++;
                     $results[$ubg['grade']] = $user['id'];
@@ -209,7 +217,18 @@ class ArchiveExams {
         // aïe, il n'y a pas eu de notes, oups, donc là on prend au pif sans note
         echo "\t\tPas de dépôt avec note ! Renvoi d'un document au hasard.\n";
         $submission = array_pop($submissions);
-        return $this->ama->get_submission_status($assignid, $submission['userid']);
+        $subStatus = $this->ama->get_submission_status($assignid, $submission['userid']);
+        // très rares cas, le ws de dessus ne renvoie rien, on reconstruit avec les infos qu'on a
+        // mais on garde l'utilisation de son retour pour le cas général déjà codé et fonctionnel
+        if (! array_key_exists('lastattempt', $subStatus)) {
+            $subStatus['lastattempt'] = [];
+            $subStatus['lastattempt']['submission'] = $submission;
+            $subStatus['lastattempt']['gradingstatus'] = $submission['gradingstatus'];
+            if (array_key_exists('feedback', $submission)) {
+                $subStatus['feedback'] = $submission['feedback'];   
+            }
+        }
+        return $subStatus;
         
     }
 
