@@ -12,34 +12,16 @@ $archiveExams = new ArchiveExams();
 $archiveExams->run();
 
 class ArchiveExams {
-    // pour iris exams 2023
-    public static $EXCLUDED_CATEGORIES = [889,882];
-    // pour iris exams 2020
-    // public static $EXCLUDED_CATEGORIES = [1, 3, 4, 12];
-
-    public static $EXCLUDED_COURSES = [1];
-    public static $EXCLUDED_MODULES = ['label', 'forum', 'resource'];
-
     public static $BULK_LOAD = 2;
 
     public static $GRADES_HEAD = 0.25;
-    public static $LIMIT_POSITIVE_GRADES = 10;
-    public static $GRADE_MINIMUM = 10;
-    public static $GRADE_FILENAME = 'note.html';
-
-    public static $DESCRIPTION_FILENAME = 'description.html';
-    public static $QUIZ_ATTEMPT_FILENAME = 'devoir.html';
-
-    public static $ASSIGN_INTRO_FILENAME = 'intro.html';
-    public static $ASSIGN_SUBMISSION_FILENAME = 'devoir';
 
     public static $MODULE_DEFAULT_NAME = 'module-default';
 
-    public static $MODULES_EXAMEN = ['quiz', 'assign'];
-
     /** @var moodle_rest $moodle_rest */
     protected $moodle_rest;
-
+    /** @var array $config */
+    protected $config;
     protected $allCategories = null;
 
     /** @var archive_courses $ac */
@@ -51,28 +33,53 @@ class ArchiveExams {
     /** @var archive_mod_quiz $amq */
     protected $amq;
 
+    public function __construct() {
+        $this->config = $this->loadConfig();
+    }
+    protected function loadConfig() {
+        return require __DIR__.'/config.php';
+    }
+    public function getConfig($key, $default = null) {
+        // Split the key by dots to access nested arrays
+        $keys = explode('.', $key);
+        $value = $this->config;
+    
+        // Traverse through the array using each key segment
+        foreach ($keys as $key) {
+            if (is_array($value) && isset($value[$key])) {
+                $value = $value[$key];
+            }
+            else {
+                // If any key segment is missing, return the default value
+                return $default;
+            }
+        }
+    
+        return $value;
+    }
+
     public function run() {
 
-        $this->moodle_rest = new moodle_rest(URL, WSTOKEN, false);
+        $this->moodle_rest = new moodle_rest($this->getConfig('wsurl'), $this->getConfig('wstoken'), false);
 
         $this->ac = new archive_courses($this->moodle_rest);
         $this->amf = new archive_mod_folder($this->moodle_rest);
         $this->ama = new archive_mod_assign($this->moodle_rest);
         $this->amq = new archive_mod_quiz($this->moodle_rest);
 
-        $this->allCategories = $this->ac->loadAllCategories();
-        $courses = $this->ac->get_all_courses();
+        $this->allCategories = $this->ac->loadAllCategories($this->getConfig('excluded_categories'));
+        $courses = $this->ac->get_all_courses($this->getConfig('excluded_courses'));
         if (isset($courses['errorcode'])) {
             die($courses['errorcode'].': '.$courses['message']);
         }
         foreach ($courses as $course) {
-            echo 'Parcours de '.$course['fullname'].' ('.$course['id'].") ...\n";
+            echo 'On course: '.$course['fullname'].' ('.$course['id'].") ...\n";
             $coursePath = $this->getCoursePath($course);
             $users = $this->ac->get_enrolled_users($course['id']);
-            echo "\tUtilisateurs inscrits : ".count($users)."\n";
+            echo "\tEnrolled users: ".count($users)."\n";
             $courseContents = $this->ac->get_course_contents($course['id']);
             if (! $this->courseHasExam($courseContents)) {
-                echo "\tPas de contenu pour ce cours.\n";
+                echo "\tNo interesting content.\n";
                 continue;
             }
             // dans le cas où un cours possède du contenu, on sauvegarde tout car tous les cas de figure sont possible 
@@ -80,52 +87,71 @@ class ArchiveExams {
             $sectionNumber = 0;
             foreach ($courseContents as $section) {
                 $sectionPath = $coursePath.str_pad($sectionNumber, 2, '0', STR_PAD_LEFT).'_'.$section['name'].DIRECTORY_SEPARATOR;
-                echo "\tParcours de la section (".$section['name'].")\n";
+                echo "\tOn section (".$section['name'].")\n";
                 $moduleNumber = 0;
                 foreach ($section['modules'] as $module) {
-                    $modulePath = $sectionPath.str_pad($moduleNumber, 2, '0', STR_PAD_LEFT).'_'.($module['name'] ?? self::$MODULE_DEFAULT_NAME);
-                    if ($module['modname'] == 'quiz') {
-                        $htmlQuizAttempt = $this->getRandomQuizAttempt($module, $users);
-                        echo "\t\tArchivage du (".$module['modname'].'-'.$module['instance'].') du nom ('.$module['name'].")\n";
-                        $this->saveModuleDescription($module, $modulePath);
-                        archive_fileutils::writeFile($modulePath, self::$QUIZ_ATTEMPT_FILENAME, $htmlQuizAttempt, true);
-                    }
-                    else if ($module['modname'] == 'assign') {
-                        echo "\t\tArchivage du (".$module['modname'].'-'.$module['instance'].') du nom ('.$module['name'].")\n";
-                        $submissions = $this->ama->get_submissions($module['instance']);
-                        if (isset($submissions['errorcode'])) {
-                            echo "\t\t".$submissions['errorcode'].': '.$submissions['message']."\n";
+                    if (in_array($module['modname'], $this->getConfig('allowed_modules'))) {
+                        $modulePath = $sectionPath.str_pad($moduleNumber, 2, '0', STR_PAD_LEFT).'_'.($module['name'] ?? self::$MODULE_DEFAULT_NAME);
+
+                        if ($module['modname'] == 'quiz') {
+                            $this->quizz($module, $users, $modulePath);
+                        }
+                        else if ($module['modname'] == 'assign') {
+                            $this->assign($module, $course, $modulePath);
+                        }
+                        else if ($module['modname'] == 'folder') {
+                            $this->saveFolder($module, $modulePath);
+                        }
+                        else if ($module['modname'] == 'label') {
+                            $this->saveLabel($module, $modulePath);
+                        }
+                        else if ($module['modname'] == 'resource') {
+                            $this->saveResource($module, $modulePath);
                         }
                         else {
-                            $submissions = (array_pop($submissions['assignments']))['submissions'];
-                            echo "\t\t".'Devoirs rendus : ('.count($submissions).")\n";
-                            if (count($submissions) > 0) {
-                                $this->saveModuleDescription($module, $modulePath);
-                                $this->saveAssignMetadata($module['instance'], $course['id'], $modulePath);
-                                $submission = $this->getRandomAssignSubmission($module['instance'], $submissions);
-                                $this->saveSubmission($submission, $modulePath);
-                                echo "\t\tDépôt de l'utilisateur (".$submission['lastattempt']['submission']['userid'].')'."\n";
-                            }
-                            else {
-                                echo "\t\tPas de submission pour ".$module['name']."\n";
-                            }
+                            echo "Module ".$module['modname']." non géré\n";
                         }
-                    }
-                    else if ($module['modname'] == 'folder') {
-                        $this->saveFolder($module, $modulePath);
-                    }
-                    else if ($module['modname'] == 'label') {
-                        $this->saveLabel($module, $modulePath);
-                    }
-                    else if ($module['modname'] == 'resource') {
-                        $this->saveResource($module, $modulePath);
-                    }
-                    else {
-                        echo "Module ".$module['modname']." non géré\n";
                     }
                     $moduleNumber++;
                 }
                 $sectionNumber++;
+            }
+        }
+    }
+
+    /**
+     * Manage the extraction of a quizz
+     *
+     * @param array $module
+     * @param array $users
+     * @param string $modulePath
+     * @return void
+     */
+    public function quizz($module, $users, $modulePath) {
+        $htmlQuizAttempt = $this->getRandomQuizAttempt($module, $users);
+        echo "\t\tArchivage du (".$module['modname'].'-'.$module['instance'].') du nom ('.$module['name'].")\n";
+        $this->saveModuleDescription($module, $modulePath);
+        archive_fileutils::writeFile($modulePath, $this->getConfig('quiz_attempt_filename'), $htmlQuizAttempt, true);
+    }
+
+    public function assign($module, $course, $modulePath) {
+        echo "\t\tArchivage du (".$module['modname'].'-'.$module['instance'].') du nom ('.$module['name'].")\n";
+        $submissions = $this->ama->get_submissions($module['instance']);
+        if (isset($submissions['errorcode'])) {
+            echo "\t\t".$submissions['errorcode'].': '.$submissions['message']."\n";
+        }
+        else {
+            $submissions = (array_pop($submissions['assignments']))['submissions'];
+            echo "\t\t".'Devoirs rendus : ('.count($submissions).")\n";
+            if (count($submissions) > 0) {
+                $this->saveModuleDescription($module, $modulePath);
+                $this->saveAssignMetadata($module['instance'], $course['id'], $modulePath);
+                $submission = $this->getRandomAssignSubmission($module['instance'], $submissions);
+                $this->saveSubmission($submission, $modulePath);
+                echo "\t\tDépôt de l'utilisateur (".$submission['lastattempt']['submission']['userid'].')'."\n";
+            }
+            else {
+                echo "\t\tPas de submission pour ".$module['name']."\n";
             }
         }
     }
@@ -139,7 +165,7 @@ class ArchiveExams {
     public function courseHasExam($courseContents) {
         foreach ($courseContents as $courseContent) {
             foreach ($courseContent['modules'] as $module) {
-                if (in_array($module['modname'], self::$MODULES_EXAMEN)) {
+                if (in_array($module['modname'], $this->getConfig('allowed_modules'))) {
                     return true;
                 }
             }
@@ -150,7 +176,7 @@ class ArchiveExams {
     public function saveModuleDescription($module, $directory) {
         if ((! empty($module['description'])) && (strlen(trim($module['description'])) > 0)) {
             archive_fileutils::ensureDirectory($directory);
-            return archive_fileutils::writeFile($directory, self::$DESCRIPTION_FILENAME, $module['description'], true);
+            return archive_fileutils::writeFile($directory, $this->getConfig('description_filename'), $module['description'], true);
         }
         return false;
     }
@@ -167,12 +193,12 @@ class ArchiveExams {
                 echo "\t\t".$ubg['exception']."/".$ubg['errorcode']."/".$ubg['message']."\n";
             }
             else {
-                if (($ubg['hasgrade']) && ($ubg['grade'] > self::$GRADE_MINIMUM)) {
+                if (($ubg['hasgrade']) && ($ubg['grade'] > $this->getConfig('grade_minimum'))) {
                     $positiveResultsCount++;
                     $results[$ubg['grade']] = $user['id'];
                 }
-                if ($positiveResultsCount > self::$LIMIT_POSITIVE_GRADES) {
-                    echo "\t\t".self::$LIMIT_POSITIVE_GRADES. ' trouvés après '.$positiveResultsCount." tentatives.\n";
+                if ($positiveResultsCount > $this->getConfig('limit_positive_grades')) {
+                    echo "\t\t".$this->getConfig('limit_positive_grades'). ' trouvés après '.$positiveResultsCount." tentatives.\n";
                     break;
                 }
             }
@@ -206,7 +232,7 @@ class ArchiveExams {
             if ($submission['gradingstatus'] != 'notgraded') {
                 $subStatus = $this->ama->get_submission_status($assignid, $submission['userid']);
                 if (isset($subStatus['feedback'])) {
-                    if (intval($subStatus['feedback']['grade']['grade']) > self::$GRADE_MINIMUM) {
+                    if (intval($subStatus['feedback']['grade']['grade']) > $this->getConfig('grade_minimum')) {
                         return $subStatus;
                     }
                 }   
@@ -238,7 +264,7 @@ class ArchiveExams {
             if ($assignment['id'] == $assignid) {
                 // l'intro contenant souvent les explications
                 if (strlen($assignment['intro']) > 0) {
-                    archive_fileutils::writeFile($directory, self::$ASSIGN_INTRO_FILENAME, $assignment['intro'], true);
+                    archive_fileutils::writeFile($directory, $this->getConfig('assign_intro_filename'), $assignment['intro'], true);
                 }
                 // les documents attachés, parfois le sujet
                 foreach ($assignment['introattachments'] as $attachment) {
@@ -265,7 +291,7 @@ class ArchiveExams {
                         $iFile = 1;
                         foreach ($filearea['files'] as $file) {
                             $extension = archive_fileutils::getExtension($file['filename']);
-                            archive_fileutils::writeFile($directory, self::$ASSIGN_SUBMISSION_FILENAME.'_'.$iFile.'.'.$extension, $this->moodle_rest->getFile($file['fileurl']), true);
+                            archive_fileutils::writeFile($directory, $this->getConfig('assign_submission_filename').'_'.$iFile.'.'.$extension, $this->moodle_rest->getFile($file['fileurl']), true);
                             $iFile++;
                         }
                     }
@@ -275,7 +301,7 @@ class ArchiveExams {
             if ($submission['lastattempt']['gradingstatus'] != 'notgraded') {
                 $note = $submission['feedback']['gradefordisplay'];
             }
-            archive_fileutils::writeFile($directory, self::$GRADE_FILENAME, $note, true);
+            archive_fileutils::writeFile($directory, $this->getConfig('grade_filename'), $note, true);
         }
     }
 
@@ -284,7 +310,7 @@ class ArchiveExams {
      */
     public function saveFolder($module, $modulepath) {
         archive_fileutils::ensureDirectory($modulepath);
-        archive_fileutils::writeFile($modulepath, self::$DESCRIPTION_FILENAME, $module['description'], true);
+        archive_fileutils::writeFile($modulepath, $this->getConfig('description_filename'), $module['description'], true);
         foreach ($module['contents'] as $folderContent) {
             if ($folderContent['type'] == 'file') {
                 archive_fileutils::writeFile($modulepath, $folderContent['filename'], $this->moodle_rest->getFile($folderContent['fileurl']), true);
@@ -294,7 +320,7 @@ class ArchiveExams {
 
     public function saveLabel($module, $modulepath) {
         archive_fileutils::ensureDirectory($modulepath);
-        archive_fileutils::writeFile($modulepath, self::$DESCRIPTION_FILENAME, $module['description'], true);
+        archive_fileutils::writeFile($modulepath, $this->getConfig('description_filename'), $module['description'], true);
     }
 
     public function saveResource($module, $modulepath) {

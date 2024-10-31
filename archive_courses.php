@@ -54,12 +54,14 @@ class archive_courses {
      * 
      * @return array toutes les catégories indexées par leur id
      */
-    public function loadAllCategories() {
+    public function loadAllCategories($excludedCategories = array()) {
         $categories = $this->moodle_rest->fetchJson('core_course_get_categories');
         $categories = (array)json_decode($categories, true);
         $categoriesById = [];
         foreach ($categories as $category) {
-            $categoriesById[$category['id']] = $category;
+            if (! in_array($category['id'], $excludedCategories)) {
+                $categoriesById[$category['id']] = $category;
+            }
         }
         return $categoriesById;
     }
