@@ -9,7 +9,7 @@ class moodle_rest {
     protected $url;
     /** @var string $token */
     protected $token;
-    /** @var resource $curlHandler */
+    /** @var CurlHandle $curlHandler */
     protected $curlHandler;
     /** @var bool $debug */
     protected $debug;
