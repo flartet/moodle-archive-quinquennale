@@ -37,7 +37,7 @@ class ArchiveExams {
         $this->config = $this->loadConfig();
     }
     protected function loadConfig() {
-        return require __DIR__.'/config.php';
+        return require __DIR__.'/archive-config.php';
     }
     public function getConfig($key, $default = null) {
         // Split the key by dots to access nested arrays
@@ -339,7 +339,7 @@ class ArchiveExams {
      * @return string le chemin absolu calculé
      */
     public function getCoursePath($course) {
-        $path = ARCHIVE_DIRNAME.DIRECTORY_SEPARATOR;
+        $path = $this->getConfig('archive_path').DIRECTORY_SEPARATOR;
         $arCategories = preg_split('/\//', $this->allCategories[$course['categoryid']]['path'], -1 , PREG_SPLIT_NO_EMPTY);
         foreach ($arCategories as $idCat) {
             $path .= $this->allCategories[$idCat]['name'].DIRECTORY_SEPARATOR;
