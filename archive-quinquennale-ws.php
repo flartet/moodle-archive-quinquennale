@@ -91,8 +91,6 @@ class ArchiveExams {
                         archive_fileutils::writeFile($modulePath, self::$QUIZ_ATTEMPT_FILENAME, $htmlQuizAttempt, true);
                     }
                     else if ($module['modname'] == 'assign') {
-if ($module['instance'] != 2407) continue;
-
                         echo "\t\tArchivage du (".$module['modname'].'-'.$module['instance'].') du nom ('.$module['name'].")\n";
                         $submissions = $this->ama->get_submissions($module['instance']);
                         if (isset($submissions['errorcode'])) {
