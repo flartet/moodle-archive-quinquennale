@@ -1,92 +1,76 @@
 # Iris Archive
 
+## Contexte du projet
+Ce projet d'archive quinquennale s'inscrit dans les obligations légales qui incombent aux universités en terme de conservation des données d'examens.\
+Ces règles sont, après consultation de l'archiviste :
+- toutes les années en 0 ou 5, il faut conserver toutes les consignes d'examens ainsi qu'une copie anonymisée non-blanche prise au hasard
+- toutes les autres années, même chose mais pas besoin de copie.
 
+## Fonctionnement
+Le script se veut simple à lancer en ligne de commandes. Plutôt que de réinventer la roue et faire des appels directs en base de données, ce qui est parfois tentant, il se sert des webservices de Moodle pour la récupérations des infos. Il est de ce fait moins rapide qu'un script qui ferait des appels directs mais le retour sera plus consistant.\
+L'utilisation des webservices demande cependant des droits bien spécifiques pour un utilisateur.\
+### Pour aller plus loin
+Le script, à l'aide de l'utilisateur dédié va reproduire l'arborescence de la plateforme dans un répertoire défini.\
+Pour l'instant, seuls les modules assign (dépôts de devoirs) et quiz voient leurs examens archivés.\
+Que ce soit assign ou quiz, une note seuil, afin d'éviter les copies blanches est définie (grade_minimum ; dans le vocable Moodle grade=note). Le nombre de quiz passés dépassant la note seuil est aussi défini (limit_positive_grades) afin d'accélérer le traitement. Dans la configuration de base, si 10 étudiants ont >10 à un test, la "copie" au hasard est choisie parmi les 10.\
+Lorsqu'il n'y a pas de note, ce qui arrive souvent sur les dépôts de devoir, un devoir/quiz est pris au hasard, avec un risque de copie blanche.\
+Les modules folder/label sont systématiquement extraits car ils peuvent contenir des informations sur l'examen présent dans le cours.\
 
-## Getting started
+### Paramétrage des webservices pour un utilisateur dédié à l'archive
+#### Création du rôle
+Le fichier webservice.xml permet l'import d'un rôle dans Moodle, rôle qui a tout ce qu'il faut pour que la version courante du script ait accès à ce dont il a besoin.
+#### Création d'un utilisateur dédié
+Libre cours à l'imagination, il aura le rôle créé précédemment au niveau système
+#### Attribution du rôle à l'utilisateur fraîchement créé
+Au niveau système afin qu'il ait accès à tout ou bien au niveau de votre catégorie spécifique où se trouvent les examens.
+#### Création d'un service externe
+À effectuer dans le menu dédié de Moodle : */admin/settings.php?section=externalservices*\
+Ajouter un service, par ex "archive" qui aura une liste d'utilisateurs autorisés, qui pourra télécharger des fichiers et sera activé.\
+#### Ajout d'utilisateurs au service externe
+Dans le menu dédié "Utilisateurs autorisés" ajouter l'utilisateur ayant le rôle webservice.
+#### Ajout de fonctions au service externe
+Enfin, ce service doit avoir accès à tous les webservices nécessaires, actuellement :
+| Fonction                                       | Description                                                                                                 | Capacités requises                                                                                           |
+|------------------------------------------------|-------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| core_course_get_categories                     | Return category details                                                                                     | moodle/category:viewhiddencategories                                                                         |
+| core_course_get_contents                       | Get course contents                                                                                         | moodle/course:update, moodle/course:viewhiddencourses                                                        |
+| core_course_get_course_module                  | Return information about a course module                                                                    | moodle/course:view                                                                                           |
+| core_course_get_course_module_by_instance      | Return information about a given module name and instance id                                                | moodle/course:view                                                                                           |
+| core_course_get_courses                        | Return course details                                                                                       | moodle/course:view, moodle/course:update, moodle/course:viewhiddencourses                                    |
+| core_course_get_courses_by_field               | Get courses matching a specific field (id/s, shortname, idnumber, category)                                 | moodle/course:view                                                                                           |
+| core_enrol_get_enrolled_users                  | Get enrolled users by course id.                                                                            | moodle/user:viewdetails, moodle/user:viewhiddendetails, moodle/course:useremail, moodle/user:update, site:accessallgroups |
+| core_files_get_files                           | Browse Moodle files                                                                                         | moodle/course:view                                                                                           |
+| mod_assign_get_assignments                     | Returns the courses and assignments for the users capability                                                | mod/assign:view                                                                                              |
+| mod_assign_get_participant                     | Get a participant for an assignment, with some summary info about their submissions.                        | mod/assign:view, mod/assign:viewgrades                                                                       |
+| mod_assign_get_submissions                     | Returns the submissions for assignments                                                                     | mod/assign:view                                                                                              |
+| mod_assign_get_submission_status               | Returns information about an assignment submission status for a given user.                                 | mod/assign:view                                                                                              |
+| mod_assign_list_participants                   | List the participants for a single assignment, with some summary info about their submissions.              | mod/assign:view, mod/assign:viewgrades                                                                       |
+| mod_folder_get_folders_by_courses              | Returns a list of folders in a provided list of courses. If no list is provided, all folders the user can view will be returned. Please note that this WS is not returning the folder contents. | mod/folder:view                                                                                              |
+| mod_quiz_get_attempt_data                      | Returns information for the given attempt page for a quiz attempt in progress.                              | mod/quiz:attempt                                                                                             |
+| mod_quiz_get_attempt_review                    | Returns review information for the given finished attempt, can be used by users or teachers.                | mod/quiz:reviewmyattempts                                                                                    |
+| mod_quiz_get_attempt_summary                   | Returns a summary of a quiz attempt before it is submitted.                                                 | mod/quiz:attempt                                                                                             |
+| mod_quiz_get_quizzes_by_courses                | Returns a list of quizzes in a provided list of courses, if no list is provided all quizzes that the user can view will be returned. | mod/quiz:view                                                                                              |
+| mod_quiz_get_user_attempts                     | Return a list of attempts for the given quiz and user.                                                      | mod/quiz:view                                                                                                |
+| mod_quiz_get_user_best_grade                   | Get the best current grade for the given user on a quiz.                                                    | mod/quiz:view                                                                                                |
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+#### Activation du protocole REST
+Celui-ci s'active sur la page dédiée : */admin/settings.php?section=webserviceprotocols*
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitoune.i-univ-tlse2.fr/enteam/iris-archive.git
-git branch -M main
-git push -uf origin main
-```
-
-## Integrate with your tools
-
-- [ ] [Set up project integrations](https://gitoune.i-univ-tlse2.fr/enteam/iris-archive/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Automatically merge when pipeline succeeds](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+#### Création du jeton d'authentification
+Dans le dernier menu, il faut créer un jeton pour que l'utilisateur du webservice ait accès au service externe "archive" et récupérer ce jeton pour le placer dans la configuration.
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+Le script a été créé sous Linux et n'a pas été testé sous Windows. Si ce ne sont les chemins dans la configuration, il devrait néanmoins fonctionner.\
+Un *git clone* du dépôt ou bien une téléchargement des sources suffit.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## Utilisation
+Le fichier de configuration doit être créé sous le nom *archive-config.php*. Un fichier exemple est présent et bien documenté.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+## Support & Contribution
+Tant bien que mal, j'essaierai de lire les Issues mais si nous sommes plusieurs à y contribuer, c'est encore mieux.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+## Licence
+Comme Moodle actuellement, GPL v3.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+## TODO
+contrôle d'erreur directement dans l'appel du webservice
