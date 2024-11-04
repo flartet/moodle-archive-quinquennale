@@ -19,10 +19,15 @@ class archive_courses {
      * 
      * @return array les cours
      */
-    public function get_all_courses() {
+    public function get_all_courses($excluded_courses, $excluded_categories) {
         // $courses = $this->moodle_rest->fetchJson('core_course_get_courses', ['options' => ['ids' => [4986]]]);
         $courses = $this->moodle_rest->fetchJson('core_course_get_courses');
         $courses = json_decode($courses, true);
+        foreach ($courses as $key => $course) {
+            if (in_array($course['id'], $excluded_courses)) {
+                unset($courses[$key]);
+            }
+        }
         return $courses;
     }
 
@@ -59,12 +64,28 @@ class archive_courses {
         $categories = (array)json_decode($categories, true);
         $categoriesById = [];
         foreach ($categories as $category) {
-            if (! in_array($category['id'], $excludedCategories)) {
-                $categoriesById[$category['id']] = $category;
+            if (in_array($category['id'], $excludedCategories)) {
+                $excludedCategories = array_merge($excludedCategories, $this->getSonsRecursive($categories, 10));
             }
+            $categoriesById[$category['id']] = $category;
+        }
+        foreach ($excludedCategories as $excludedCategory) {
+            unset($categoriesById[$excludedCategory]);
         }
         return $categoriesById;
     }
+
+    public function getSonsRecursive($categories, $catId, $sons = []) {
+        foreach ($categories as $category) {
+            if ($category['parent'] == $catId) {
+                array_push($sons, $category['id']);
+                $sons = array_merge($this->getSonsRecursive($categories, $category['id'], $sons));
+            }
+        }
+        return $sons;
+
+    }
+
 }
 
 ?>
