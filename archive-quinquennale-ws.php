@@ -191,7 +191,7 @@ class ArchiveExams {
             else {
                 if (($ubg['hasgrade']) && ($ubg['grade'] > $this->getConfig('grade_minimum'))) {
                     $positiveResultsCount++;
-                    $results[$ubg['grade']] = $user['id'];
+                    $results[] = $user['id'];
                 }
                 if ($positiveResultsCount > $this->getConfig('limit_positive_grades')) {
                     echo "\t\t".$this->getConfig('limit_positive_grades'). ' trouvés après '.$positiveResultsCount." tentatives.\n";
@@ -203,6 +203,7 @@ class ArchiveExams {
             echo "\t\tErreur dans le parcours du quiz (".$module['instance']."), pas de résultat.\n";
             return null;
         }
+        shuffle($results);
         $randomUser = array_pop($results);
         $attempts = $this->amq->get_user_attempts($module['instance'], $randomUser);
         $attempt = array_pop($attempts['attempts']);
