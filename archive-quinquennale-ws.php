@@ -12,10 +12,6 @@ $archiveExams = new ArchiveExams();
 $archiveExams->run();
 
 class ArchiveExams {
-    public static $BULK_LOAD = 2;
-
-    public static $GRADES_HEAD = 0.25;
-
     public static $MODULE_DEFAULT_NAME = 'module-default';
 
     /** @var moodle_rest $moodle_rest */
