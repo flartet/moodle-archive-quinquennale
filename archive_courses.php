@@ -19,15 +19,17 @@ class archive_courses {
      * 
      * @return array les cours
      */
-    public function get_all_courses($excluded_courses, $excluded_categories) {
+    public function get_all_courses($excluded_courses, $categories) {
         // $courses = $this->moodle_rest->fetchJson('core_course_get_courses', ['options' => ['ids' => [4986]]]);
         $courses = $this->moodle_rest->fetchJson('core_course_get_courses');
         $courses = json_decode($courses, true);
         foreach ($courses as $key => $course) {
-            if (in_array($course['id'], $excluded_courses)) {
+            if ((in_array($course['id'], $excluded_courses)) || (!array_key_exists($course['categoryid'], $categories))) {
                 unset($courses[$key]);
+                echo "Écartement de ".$course['fullname']." sans catégorie chargée (".$course['categoryid'].").\n";
             }
         }
+        die;
         return $courses;
     }
 
@@ -65,11 +67,12 @@ class archive_courses {
         $categoriesById = [];
         foreach ($categories as $category) {
             if (in_array($category['id'], $excludedCategories)) {
-                $excludedCategories = array_merge($excludedCategories, $this->getSonsRecursive($categories, 10));
+                $excludedCategories = array_merge($excludedCategories, $this->getSonsRecursive($categories, $category['id']));
             }
             $categoriesById[$category['id']] = $category;
         }
         foreach ($excludedCategories as $excludedCategory) {
+            echo "Écartement de la catégorie ".$categoriesById[$excludedCategory]['name']."\n";
             unset($categoriesById[$excludedCategory]);
         }
         return $categoriesById;

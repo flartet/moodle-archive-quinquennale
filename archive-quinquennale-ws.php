@@ -64,7 +64,7 @@ class ArchiveExams {
         $this->amq = new archive_mod_quiz($this->moodle_rest);
 
         $this->allCategories = $this->ac->loadAllCategories($this->getConfig('excluded_categories'));
-        $courses = $this->ac->get_all_courses($this->getConfig('excluded_courses'), $this->getConfig('excluded_categories'));
+        $courses = $this->ac->get_all_courses($this->getConfig('excluded_courses'), $this->allCategories);
         if (isset($courses['errorcode'])) {
             die($courses['errorcode'].': '.$courses['message']);
         }
