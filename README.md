@@ -1,4 +1,4 @@
-# Iris Archive
+# Moodle Archive quinquennale
 
 ## Contexte du projet
 Ce projet d'archive quinquennale s'inscrit dans les obligations légales qui incombent aux universités en terme de conservation des données d'examens.\
