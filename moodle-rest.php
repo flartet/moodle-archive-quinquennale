@@ -87,7 +87,16 @@ class moodle_rest {
         curl_setopt($this->curlHandler, CURLOPT_URL, $url.'?'.$args);
         curl_setopt($this->curlHandler, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($this->curlHandler, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($this->curlHandler, CURLOPT_SSL_VERIFYHOST, false);
         $fileContents = curl_exec($this->curlHandler);
+
+
+        $curl_errno = curl_errno($this->curlHandler);
+        $curl_error = curl_error($this->curlHandler);
+
+        if ($curl_errno > 0) {
+            echo "cURL Error ($curl_errno): $curl_error\n";die;
+        } 
         curl_close($this->curlHandler);
         
         return $fileContents;
