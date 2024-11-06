@@ -17,10 +17,13 @@ class archive_courses {
     /**
      * Récupère tous les cours avec leurs caractéristiques
      * 
+     * @param array $excluded_courses le tableau des cours à exclure (en config)
+     * @param array $categories un tableau de catégories tel que renvoyé par getAllCategories, indexé par id
      * @return array les cours
      */
     public function get_all_courses($excluded_courses, $categories) {
-        // $courses = $this->moodle_rest->fetchJson('core_course_get_courses', ['options' => ['ids' => [4986]]]);
+        // si on veut faire un test sur un seul cours, on peut forcer ici
+        // $courses = $this->moodle_rest->fetchJson('core_course_get_courses', ['options' => ['ids' => [5968]]]);
         $courses = $this->moodle_rest->fetchJson('core_course_get_courses');
         $courses = json_decode($courses, true);
         foreach ($courses as $key => $course) {
@@ -29,13 +32,13 @@ class archive_courses {
                 echo "Écartement de ".$course['fullname']." sans catégorie chargée (".$course['categoryid'].").\n";
             }
         }
-        die;
         return $courses;
     }
 
     /**
      * Récupère les utilisateurs inscrits dans le cours
      * 
+     * @param int $courseid l'id du cours
      * @return array les utilisateurs inscrits 
      */
     public function get_enrolled_users($courseid) {
@@ -59,6 +62,7 @@ class archive_courses {
     /**
      * Récupère toutes les catégories
      * 
+     * @param array $excludedCategories les ids des catégories à supprimer
      * @return array toutes les catégories indexées par leur id
      */
     public function loadAllCategories($excludedCategories = array()) {
@@ -78,6 +82,14 @@ class archive_courses {
         return $categoriesById;
     }
 
+    /**
+     * Récupération récursive des catégories enfant d'une catégorie
+     *
+     * @param array $categories le tableau des catégories indexé par id avec au moins id, parent
+     * @param int $catId l'id de la catégorie
+     * @param array $sons tableau utile à la récursion
+     * @return array tous les id des descendants de la catégorie
+     */
     public function getSonsRecursive($categories, $catId, $sons = []) {
         foreach ($categories as $category) {
             if ($category['parent'] == $catId) {
