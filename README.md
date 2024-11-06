@@ -73,4 +73,4 @@ Tant bien que mal, j'essaierai de lire les Issues mais si nous sommes plusieurs 
 Comme Moodle actuellement, GPL v3.
 
 ## TODO
-contrôle d'erreur directement dans l'appel du webservice
+~~contrôle d'erreur directement dans l'appel du webservice~~
